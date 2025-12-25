@@ -80,8 +80,6 @@ services:
       - "traefik.http.routers.kibana.rule=Host(`kibana.meetgine.com`)"
       - "traefik.http.routers.kibana.entrypoints=websecure"
       - "traefik.http.routers.kibana.tls=true"
-      - "traefik.http.middlewares.kibana-auth.basicauth.users=admin:${KIBANA_BASIC_AUTH}"
-      - "traefik.http.routers.kibana.middlewares=kibana-auth"
       - "traefik.http.services.kibana.loadbalancer.server.port=5601"
 
 networks:
