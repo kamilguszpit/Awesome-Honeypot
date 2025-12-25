@@ -1,9 +1,7 @@
 version: "3.8"
 
 volumes:
-  cowrie-etc:
   cowrie-var:
-  cowrie-src:
   elasticsearch-data:
 
 services:
@@ -16,9 +14,10 @@ services:
       - "23:2223"
     volumes:
       - cowrie-var:/cowrie/cowrie-git/var
-      - cowrie-src:/cowrie/cowrie-git/src
       - ./cowrie-config/cowrie.cfg:/cowrie/cowrie-git/etc/cowrie.cfg
       - ./cowrie-config/motd:/cowrie/cowrie-git/honeyfs/etc/motd
+    networks:
+      - stack
 
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.14.1
@@ -26,7 +25,8 @@ services:
     restart: always
     environment:
       - discovery.type=single-node
-      - xpack.security.enabled=false
+      - xpack.security.enabled=true
+      - ELASTIC_PASSWORD=${KIBANA_PASSWORD}
       - ES_JAVA_OPTS=-Xms512m -Xmx512m
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
@@ -37,9 +37,10 @@ services:
     image: docker.elastic.co/logstash/logstash:7.14.1
     container_name: cowrie-logstash
     restart: always
+    environment:
+      - xpack.monitoring.enabled=false
     volumes:
       - ./elastic-config/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
-      - ./GeoLite2-City.mmdb:/opt/logstash/vendor/geoip/GeoLite2-City.mmdb
     depends_on:
       - elasticsearch
     networks:
@@ -49,10 +50,11 @@ services:
     image: docker.elastic.co/beats/filebeat:7.14.1
     container_name: cowrie-filebeat
     restart: always
+    user: root
     command: ["--strict.perms=false"]
     volumes:
       - ./elastic-config/filebeat.yml:/usr/share/filebeat/filebeat.yml
-      - cowrie-var:/cowrie/cowrie-git/var
+      - cowrie-var:/cowrie/cowrie-git/var:ro
     depends_on:
       - logstash
     networks:
@@ -64,16 +66,9 @@ services:
     restart: always
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-      - KIBANA_PASSWORD=${KIBANA_PASSWORD}
+      - ELASTICSEARCH_USERNAME=elastic
+      - ELASTICSEARCH_PASSWORD=${KIBANA_PASSWORD}
       - SERVER_PUBLICBASEURL=https://kibana.meetgine.com
-
-    entrypoint:
-      - sh
-      - -c
-      - |
-        export KIBANA_BASIC_AUTH=admin:$(htpasswd -nbB admin "$KIBANA_PASSWORD" | cut -d':' -f2)
-        echo "Ustawiono KIBANA_BASIC_AUTH=$KIBANA_BASIC_AUTH"
-        exec /usr/local/bin/kibana-docker
     networks:
       - stack
       - dokploy-network
@@ -86,6 +81,5 @@ services:
 
 networks:
   stack:
-    internal: true
   dokploy-network:
     external: true
