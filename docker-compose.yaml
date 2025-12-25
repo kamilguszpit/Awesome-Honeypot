@@ -5,7 +5,6 @@ volumes:
   cowrie-var:
   cowrie-src:
   elasticsearch-data:
-  traefik-users:
 
 services:
   cowrie:
@@ -70,11 +69,9 @@ services:
       - sh
       - -c
       - |
-        mkdir -p /traefik/users
-        htpasswd -nbB admin "$KIBANA_PASSWORD" > /traefik/users/kibana-users
+        export KIBANA_BASIC_AUTH=admin:$(htpasswd -nbB admin "$KIBANA_PASSWORD" | cut -d':' -f2)
+        echo "Ustawiono KIBANA_BASIC_AUTH=$KIBANA_BASIC_AUTH"
         exec /usr/local/bin/kibana-docker
-    volumes:
-      - traefik-users:/traefik/users
     networks:
       - stack
       - dokploy-network
@@ -83,7 +80,7 @@ services:
       - "traefik.http.routers.kibana.rule=Host(`kibana.meetgine.com`)"
       - "traefik.http.routers.kibana.entrypoints=websecure"
       - "traefik.http.routers.kibana.tls=true"
-      - "traefik.http.middlewares.kibana-auth.basicauth.usersfile=/traefik/users/kibana-users"
+      - "traefik.http.middlewares.kibana-auth.basicauth.users=admin:${KIBANA_BASIC_AUTH}"
       - "traefik.http.routers.kibana.middlewares=kibana-auth"
       - "traefik.http.services.kibana.loadbalancer.server.port=5601"
 
