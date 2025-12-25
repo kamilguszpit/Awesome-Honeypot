@@ -1,20 +1,16 @@
-version: '3'
+version: "3.8"
 
 volumes:
   cowrie-etc:
-    driver: local
   cowrie-var:
-    driver: local
   cowrie-src:
-    driver: local
   elasticsearch-data:
-    driver: local
 
 services:
   cowrie:
-    restart: always
     image: cowrie/cowrie:latest
     container_name: cowrie-cowrie
+    restart: always
     ports:
       - "22:2222"
       - "23:2223"
@@ -27,62 +23,61 @@ services:
   elasticsearch:
     image: docker.elastic.co/elasticsearch/elasticsearch:7.14.1
     container_name: cowrie-elasticsearch
+    restart: always
     environment:
-      - xpack.security.enabled=false
       - discovery.type=single-node
-    ulimits:
-      memlock:
-        soft: -1
-        hard: -1
-      nofile:
-        soft: 65536
-        hard: 65536
-    cap_add:
-      - IPC_LOCK
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms512m -Xmx512m
     volumes:
       - elasticsearch-data:/usr/share/elasticsearch/data
-    ports:
-      - 9200:9200
-      - 9300:9300
     networks:
       - stack
 
-  kibana:
-    container_name: cowrie-kibana
-    image: docker.elastic.co/kibana/kibana:7.14.1
-    environment:
-      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
-    ports:
-      - 5601:5601
-    depends_on: 
+  logstash:
+    image: docker.elastic.co/logstash/logstash:7.14.1
+    container_name: cowrie-logstash
+    restart: always
+    volumes:
+      - ./elastic-config/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
+      - ./GeoLite2-City.mmdb:/opt/logstash/vendor/geoip/GeoLite2-City.mmdb
+    depends_on:
       - elasticsearch
     networks:
       - stack
 
   filebeat:
-    container_name: cowrie-filebeat
     image: docker.elastic.co/beats/filebeat:7.14.1
+    container_name: cowrie-filebeat
+    restart: always
+    command: ["--strict.perms=false"]
     volumes:
       - ./elastic-config/filebeat.yml:/usr/share/filebeat/filebeat.yml
       - cowrie-var:/cowrie/cowrie-git/var
-    depends_on: 
-      - elasticsearch
+    depends_on:
       - logstash
-    command:
-      - "--strict.perms=false"
     networks:
       - stack
 
-  logstash:
-    container_name: cowrie-logstash
-    image: docker.elastic.co/logstash/logstash:7.14.1
-    volumes:
-      - ./elastic-config/logstash.conf:/usr/share/logstash/pipeline/logstash.conf
-      - ./GeoLite2-City.mmdb:/opt/logstash/vendor/geoip/GeoLite2-City.mmdb
-    depends_on: 
-      - elasticsearch
+  kibana:
+    image: docker.elastic.co/kibana/kibana:7.14.1
+    container_name: cowrie-kibana
+    restart: always
+    environment:
+      - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
     networks:
       - stack
+      - traefik
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.kibana.rule=Host(`kibana.meetgine.com`)"
+      - "traefik.http.routers.kibana.entrypoints=websecure"
+      - "traefik.http.routers.kibana.tls=true"
+      - "traefik.http.middlewares.kibana-auth.basicauth.users=admin:$apr1$H6uskkkW$IgXLP6ewTrSuBkTrqE8wj/"
+      - "traefik.http.routers.kibana.middlewares=kibana-auth"
+      - "traefik.http.services.kibana.loadbalancer.server.port=5601"
 
 networks:
-  stack: 
+  stack:
+    internal: true
+  traefik:
+    external: true
