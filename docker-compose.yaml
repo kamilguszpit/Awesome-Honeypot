@@ -5,6 +5,7 @@ volumes:
   cowrie-var:
   cowrie-src:
   elasticsearch-data:
+  traefik-users:
 
 services:
   cowrie:
@@ -64,12 +65,16 @@ services:
     restart: always
     environment:
       - ELASTICSEARCH_HOSTS=http://elasticsearch:9200
+      - KIBANA_PASSWORD=${KIBANA_PASSWORD}
     entrypoint:
       - sh
       - -c
       - |
-        export KIBANA_BASIC_AUTH=admin:$(htpasswd -nbB admin $KIBANA_PASSWORD | cut -d':' -f2)
+        mkdir -p /traefik/users
+        htpasswd -nbB admin "$KIBANA_PASSWORD" > /traefik/users/kibana-users
         exec /usr/local/bin/kibana-docker
+    volumes:
+      - traefik-users:/traefik/users
     networks:
       - stack
       - dokploy-network
@@ -78,11 +83,9 @@ services:
       - "traefik.http.routers.kibana.rule=Host(`kibana.meetgine.com`)"
       - "traefik.http.routers.kibana.entrypoints=websecure"
       - "traefik.http.routers.kibana.tls=true"
-      - "traefik.http.middlewares.kibana-auth.basicauth.users=${KIBANA_BASIC_AUTH}"
+      - "traefik.http.middlewares.kibana-auth.basicauth.usersfile=/traefik/users/kibana-users"
       - "traefik.http.routers.kibana.middlewares=kibana-auth"
       - "traefik.http.services.kibana.loadbalancer.server.port=5601"
-
-
 
 networks:
   stack:
